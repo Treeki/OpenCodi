@@ -22,7 +22,7 @@ TARGET = OpenCodi
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -Og
+OPT = -Os
 
 
 #######################################
@@ -41,6 +41,7 @@ C_SOURCES =  \
 Src/main.c \
 Src/stm32l4xx_it.c \
 Src/stm32l4xx_hal_msp.c \
+Src/stm32l4xx_hal_timebase_tim.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_gfxmmu.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_i2c.c \

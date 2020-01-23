@@ -313,9 +313,12 @@ int main(void)
   if (HAL_UART_Init(&lpuart1Handle) != HAL_OK)
     Error_Handler();
 
-  printf("-- init start --\n");
+  printf("-- init start --\n" __TIMESTAMP__ "\n");
 
-  // this is where CODI unlocks the flash
+  HAL_FLASH_Unlock();
+  __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
+  if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_PEMPTY) != 0)
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_PEMPTY);
 
   // start sub_80A6F8C
   printf("BSP_SRAM_Init() 1\n");
@@ -326,17 +329,17 @@ int main(void)
   BSP_LED_Init(LED2);
   BSP_LED_Init(LED3);
   BSP_LED_Init(LED4);
-  printf("BSP_OSPI_NOR_Init()\n");
-  if ((result = BSP_OSPI_NOR_Init()) != OSPI_NOR_OK) {
-    printf("returned status %d\n", result);
-    while (1) {}
-  }
-  printf("BSP_OSPI_NOR_EnableMemoryMappedMode()\n");
-  if (BSP_OSPI_NOR_EnableMemoryMappedMode() != OSPI_NOR_OK)
-    while (1) {}
-  printf("BSP_SRAM_Init() 2\n");
-  if (BSP_SRAM_Init() != SRAM_OK)
-    while (1) {}
+  // printf("BSP_OSPI_NOR_Init()\n");
+  // if ((result = BSP_OSPI_NOR_Init()) != OSPI_NOR_OK) {
+  //   printf("returned status %d\n", result);
+  //   while (1) {}
+  // }
+  // printf("BSP_OSPI_NOR_EnableMemoryMappedMode()\n");
+  // if (BSP_OSPI_NOR_EnableMemoryMappedMode() != OSPI_NOR_OK)
+  //   while (1) {}
+  // printf("BSP_SRAM_Init() 2\n");
+  // if (BSP_SRAM_Init() != SRAM_OK)
+  //   while (1) {}
 
   __HAL_RCC_CRC_CLK_ENABLE();
   // end sub_80A6F8C
