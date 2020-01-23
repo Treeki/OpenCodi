@@ -30,6 +30,7 @@ extern "C" {
 #include "stm32l4xx_hal.h"
 
 void Error_Handler(void);
+void checkTouch();
 
 extern UART_HandleTypeDef lpuart1Handle, uart4Handle;
 extern LTDC_HandleTypeDef ltdcHandle;

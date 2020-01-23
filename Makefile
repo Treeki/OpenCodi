@@ -42,6 +42,7 @@ Src/main.c \
 Src/stm32l4xx_it.c \
 Src/stm32l4xx_hal_msp.c \
 Src/stm32l4xx_hal_timebase_tim.c \
+Src/ts_driver.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_gfxmmu.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_i2c.c \
@@ -70,6 +71,7 @@ $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_ll_fmc.c \
 $(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL/stm32l4r9i_eval.c \
 $(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL/stm32l4r9i_eval_sram.c \
 $(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL/stm32l4r9i_eval_ospi_nor.c \
+$(DRIVERS_DIR)/BSP/Components/ft3x67/ft3x67.c \
 Src/syscalls.c \
 Src/system_stm32l4xx.c  
 
@@ -129,6 +131,7 @@ AS_INCLUDES =
 # C includes
 C_INCLUDES =  \
 -IInc \
+-I$(DRIVERS_DIR)/BSP/Components \
 -I$(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL \
 -I$(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Inc \
 -I$(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Inc/Legacy \

@@ -65,4 +65,19 @@ void DMA2D_IRQHandler() {
   DMA2D->IFCR = DMA2D_IFCR_CCTCIF;
 }
 
+
+void EXTI9_5_IRQHandler() {
+  if (__HAL_GPIO_EXTI_GET_FLAG(GPIO_PIN_9) != RESET)
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_9);
+}
+
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+  switch (GPIO_Pin) {
+    case GPIO_PIN_9:
+      checkTouch();
+      break;
+  }
+}
+
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

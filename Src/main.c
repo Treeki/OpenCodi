@@ -22,6 +22,7 @@
 #include "stm32l4r9i_eval.h"
 #include "stm32l4r9i_eval_sram.h"
 #include "stm32l4r9i_eval_ospi_nor.h"
+#include "ts_driver.h"
 #include "stdio.h"
 #include "string.h"
 #include "img.h"
@@ -554,6 +555,11 @@ int main(void)
     screen_buffer[i * 3] = 0xFF;
   }
 
+  while (BSP_DSI_TS_Init(240, 536) != TS_OK)
+    HAL_Delay(20);
+  BSP_DSI_TS_ITConfig();
+  printf("Touchscreen configured\n");
+
 int ct = 0;
   while (1)
   {
@@ -567,13 +573,26 @@ int ct = 0;
       screen_buffer[i*3] += 8;
     }
 
-    if (ct == 10) {
+    if (ct == 50) {
       // tomorrow I'll replace this with something more reasonable
       // this is just so I don't burn my test screen into the OLED panel :p
       HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, DSI_SET_DISPLAY_OFF, 0x00);
       screenOn = 0;
     }
   }
+}
+
+void checkTouch() {
+  HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+  printf("touch!!\n");
+  TS_StateTypeDef state;
+  BSP_DSI_TS_GetState(&state);
+  printf("det:%d t:%d,%d t:%d,%d\n",
+    state.touchDetected,
+    state.touchX[0], state.touchY[0],
+    state.touchX[1], state.touchY[1]
+    );
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
 
