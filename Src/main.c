@@ -25,7 +25,7 @@
 #include "stdio.h"
 #include "img.h"
 
-// TODO make sure this is before other vars
+// pixels are stored B,G,R
 __attribute__((section(".bss.FrameBufferSection")))
 static unsigned char screen_buffer[536 * 240 * 3];
 
@@ -57,7 +57,7 @@ void LCD_LL_LayerInit(unsigned int layer_id, void *buffer) {
   cfg.Backcolor.Blue = 0;
   cfg.Backcolor.Reserved = 0xFF;
   cfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
-  cfg.FBStartAdress = 0x20000000; //(uint32_t)buffer;
+  cfg.FBStartAdress = (uint32_t)buffer;
   cfg.ImageHeight = 536;
   if (HAL_LTDC_ConfigLayer(&ltdcHandle, &cfg, layer_id) != HAL_OK) {
     printf("HAL_LTDC_ConfigLayer failed!\n");
