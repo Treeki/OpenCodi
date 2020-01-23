@@ -73,7 +73,7 @@ void sendPacket(uint32_t id, uint32_t sequence, uint8_t *payload, uint32_t paylo
   HAL_UART_Transmit(&lpuart1Handle, &empty, 1, 5000);
 }
 
-#define VERSION_NAME "TestVer"
+#define VERSION_NAME "TestVer " __TIMESTAMP__
 
 void sendDataChangeAlert(uint32_t sequence, uint32_t a, uint32_t b) {
   uint8_t payload[8];
@@ -97,6 +97,9 @@ void handlePacket(uint32_t id, uint32_t sequence, uint8_t *payload, uint32_t pay
     case 1: // CMD_MTK_GET_CODI_FLASH_VERSION
       writeBE32(buf, strlen(VERSION_NAME));
       memcpy(&buf[4], VERSION_NAME, strlen(VERSION_NAME));
+      for (int i = 0; i < strlen(VERSION_NAME); i++)
+        if (buf[4 + i] == ':')
+          buf[4 + i] = '_';
       sendPacket(2, sequence, buf, 4 + strlen(VERSION_NAME));
       break;
     case 126: // CMD_MTK_DATA_CHANGE_ALERT
@@ -412,9 +415,10 @@ void init_lcd() {
 }
 
 int toDraw = 0;
+int screenOn = 1;
 
 void HAL_DSI_TearingEffectCallback(DSI_HandleTypeDef *hdsi) {
-  if (toDraw) {
+  if (toDraw && screenOn) {
     HAL_DSI_Refresh(hdsi);
     // printf("T");
   }
@@ -561,6 +565,13 @@ int ct = 0;
     // HAL_UART_Transmit(&lpuart1Handle, buf, 4, 5000);
     for (int i = 100*240; i < 120*240; i++) {
       screen_buffer[i*3] += 8;
+    }
+
+    if (ct == 10) {
+      // tomorrow I'll replace this with something more reasonable
+      // this is just so I don't burn my test screen into the OLED panel :p
+      HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, DSI_SET_DISPLAY_OFF, 0x00);
+      screenOn = 0;
     }
   }
 }
