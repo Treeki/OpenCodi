@@ -23,6 +23,7 @@
 #include "stm32l4r9i_eval_sram.h"
 #include "stm32l4r9i_eval_ospi_nor.h"
 #include "stdio.h"
+#include "string.h"
 #include "img.h"
 
 // pixels are stored B,G,R
@@ -39,6 +40,151 @@ int __io_putchar(int ch) {
 }
 
 void SystemClock_Config(void);
+
+
+// TODO move me elsewhere...
+static uint8_t readByteBuf = 0;
+static uint8_t packetBuf[0x400];
+static int packetBufPos = 0;
+
+uint32_t readBE32(uint8_t *p) {
+  return ((uint32_t)p[0] << 24) |
+         ((uint32_t)p[1] << 16) |
+         ((uint32_t)p[2] << 8) |
+         ((uint32_t)p[3]);
+  // return __builtin_bswap32(*(uint32_t *)p);
+}
+void writeBE32(uint8_t *p, uint32_t v) {
+  p[0] = (v >> 24) & 0xFF;
+  p[1] = (v >> 16) & 0xFF;
+  p[2] = (v >> 8) & 0xFF;
+  p[3] = v & 0xFF;
+}
+
+void sendPacket(uint32_t id, uint32_t sequence, uint8_t *payload, uint32_t payloadLen) {
+  uint8_t header[0x10];
+  memcpy(header, "X!X!", 4);
+  writeBE32(&header[4], 0x10 + payloadLen);
+  writeBE32(&header[8], id);
+  writeBE32(&header[12], sequence);
+  HAL_UART_Transmit(&lpuart1Handle, header, 0x10, 5000);
+  HAL_UART_Transmit(&lpuart1Handle, payload, payloadLen, 5000);
+  uint8_t empty = 0;
+  HAL_UART_Transmit(&lpuart1Handle, &empty, 1, 5000);
+}
+
+#define VERSION_NAME "TestVer"
+
+void sendDataChangeAlert(uint32_t sequence, uint32_t a, uint32_t b) {
+  uint8_t payload[8];
+  writeBE32(&payload[0], a);
+  writeBE32(&payload[4], b);
+  sendPacket(104, sequence, payload, 8);
+}
+
+void handleDataChangeAlert(uint32_t sequence, uint32_t a, uint32_t b) {
+  if (a == 104) {
+    // ping from Android
+    sendDataChangeAlert(sequence, a, b);
+  }
+}
+
+void handlePacket(uint32_t id, uint32_t sequence, uint8_t *payload, uint32_t payloadLen) {
+  uint8_t buf[0x100];
+  // printf("packet %d\n", id);
+
+  switch (id) {
+    case 1: // CMD_MTK_GET_CODI_FLASH_VERSION
+      writeBE32(buf, strlen(VERSION_NAME));
+      memcpy(&buf[4], VERSION_NAME, strlen(VERSION_NAME));
+      sendPacket(2, sequence, buf, 4 + strlen(VERSION_NAME));
+      break;
+    case 126: // CMD_MTK_DATA_CHANGE_ALERT
+      handleDataChangeAlert(sequence, readBE32(payload), readBE32(&payload[4]));
+      break;
+  }
+}
+
+void pushByteToReadBuffer(uint8_t byte) {
+  if (packetBufPos >= sizeof(packetBuf))
+    return;
+
+  packetBuf[packetBufPos++] = byte;
+
+  // try to parse a packet: X!X!aaaabbbbcccc where a=length, b=id, c=sequence
+  int parsed = 0;
+  for (int i = 0; i <= (packetBufPos - 0x10); i++) {
+    if (memcmp(&packetBuf[i], "X!X!", 4) == 0) {
+      // we have a packet
+      uint32_t len = readBE32(&packetBuf[i + 4]);
+      uint32_t id = readBE32(&packetBuf[i + 8]);
+      uint32_t sequence = readBE32(&packetBuf[i + 12]);
+
+      if ((i + len) > packetBufPos) {
+        // we don't have enough data yet
+        parsed = i;
+        break;
+      } else {
+        // we have the full packet
+        if (len >= 16) {
+          handlePacket(id, sequence, &packetBuf[i + 16], len - 16);
+        }
+        parsed = i + len;
+      }
+    }
+  }
+
+  if (parsed > 0) {
+    memmove(&packetBuf[0], &packetBuf[parsed], packetBufPos - parsed);
+    packetBufPos -= parsed;
+  }
+  /*if (packetBufPos == 0x20) {
+    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
+      packetBuf[0], packetBuf[1],
+      packetBuf[2], packetBuf[3],
+      packetBuf[4], packetBuf[5],
+      packetBuf[6], packetBuf[7]
+      );
+    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
+      packetBuf[0x8], packetBuf[0x9],
+      packetBuf[0xA], packetBuf[0xB],
+      packetBuf[0xC], packetBuf[0xD],
+      packetBuf[0xE], packetBuf[0xF]
+      );
+    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
+      packetBuf[0x10], packetBuf[0x11],
+      packetBuf[0x12], packetBuf[0x13],
+      packetBuf[0x14], packetBuf[0x15],
+      packetBuf[0x16], packetBuf[0x17]
+      );
+    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
+      packetBuf[0x18], packetBuf[0x19],
+      packetBuf[0x1A], packetBuf[0x1B],
+      packetBuf[0x1C], packetBuf[0x1D],
+      packetBuf[0x1E], packetBuf[0x1F]
+      );
+  }*/
+}
+
+// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+//   printf("received byte %02x\n", readByteBuf);
+//   HAL_UART_Receive_IT(huart, &readByteBuf, 1);
+// }
+// void LPUART1_IRQHandler() {
+//   HAL_UART_IRQHandler(&lpuart1Handle);
+// }
+
+#include "stm32l4xx_ll_usart.h"
+void LPUART1_IRQHandler() {
+  // this seems to be how the original FW does it
+  uint8_t byte = LL_USART_ReceiveData8(LPUART1);
+  pushByteToReadBuffer(byte);
+
+  READ_REG(LPUART1->RDR);
+  LL_USART_ReceiveData8(LPUART1);
+  LL_USART_ClearFlag_TXFE(LPUART1);
+}
+
 
 
 void LCD_LL_LayerInit(unsigned int layer_id, void *buffer) {
@@ -285,8 +431,6 @@ void HAL_DSI_ErrorCallback(DSI_HandleTypeDef *hdsi) {
 
 int main(void)
 {
-  uint8_t result;
-
   __HAL_RCC_PWR_CLK_ENABLE();
   HAL_PWR_EnableBkUpAccess();
 
@@ -348,7 +492,7 @@ int main(void)
   BSP_PB_Init(BUTTON_WAKEUP, BUTTON_MODE_EXTI);
   printf("BSP_LED_On()\n");
   BSP_LED_On(LED1);
-  // this is where orig code does HAL_UART_Receive_IT on lpuart1
+  HAL_UART_Receive_IT(&lpuart1Handle, &readByteBuf, 1);
   BSP_LED_Off(LED1);
 
   // uart4Handle.Instance = UART4;
@@ -411,7 +555,7 @@ int ct = 0;
   {
     ++ct;
     HAL_Delay(500);
-    printf("running...\n");
+    // printf("running...\n");
     toDraw = 1;
     // uint8_t buf[4] = {'a','b','c','d'};
     // HAL_UART_Transmit(&lpuart1Handle, buf, 4, 5000);
