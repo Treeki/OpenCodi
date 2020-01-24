@@ -17,30 +17,36 @@
   */
 
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
-#include "gfxmmu_lut.h"
-#include "stm32l4r9i_eval.h"
+#include "opencodi.h"
 #include "stm32l4r9i_eval_sram.h"
 #include "stm32l4r9i_eval_ospi_nor.h"
-#include "ts_driver.h"
-#include "stdio.h"
 #include "string.h"
-#include "img.h"
-
-// pixels are stored B,G,R
-__attribute__((section(".bss.FrameBufferSection")))
-static unsigned char screen_buffer[536 * 240 * 3];
 
 UART_HandleTypeDef lpuart1Handle, uart4Handle;
-LTDC_HandleTypeDef ltdcHandle;
-DSI_HandleTypeDef dsiHandle;
 
 int __io_putchar(int ch) {
   HAL_UART_Transmit(&lpuart1Handle, (uint8_t *)&ch, 1, 0xFFFF);
   return ch;
 }
 
-void SystemClock_Config(void);
+
+#define consolePrint(...) do { char strbuf[0x100]; sprintf(strbuf, __VA_ARGS__); consolePush(strbuf); } while (0)
+
+char console[2048];
+lv_obj_t *consoleObj = NULL;
+void consolePush(const char *str) {
+  if (consoleObj == NULL) return;
+  int toAdd = strlen(str);
+  int currentLen = strlen(console);
+  int maxLen = sizeof(console) - 1;
+  if ((toAdd + currentLen) >= maxLen) {
+    int toRemove = maxLen - toAdd;
+    memmove(console, &console[toRemove], currentLen - toRemove);
+    currentLen -= toRemove;
+  }
+  strcpy(&console[currentLen], str);
+  lv_label_set_static_text(consoleObj, console);
+}
 
 
 // TODO move me elsewhere...
@@ -92,7 +98,9 @@ void handleDataChangeAlert(uint32_t sequence, uint32_t a, uint32_t b) {
 
 void handlePacket(uint32_t id, uint32_t sequence, uint8_t *payload, uint32_t payloadLen) {
   uint8_t buf[0x100];
-  // printf("packet %d\n", id);
+  // TODO shouldn't be calling this from an IRQ handler
+  // littlevGL is not thread safe
+  consolePrint("recv packet %lu\n", id);
 
   switch (id) {
     case 1: // CMD_MTK_GET_CODI_FLASH_VERSION
@@ -142,41 +150,7 @@ void pushByteToReadBuffer(uint8_t byte) {
     memmove(&packetBuf[0], &packetBuf[parsed], packetBufPos - parsed);
     packetBufPos -= parsed;
   }
-  /*if (packetBufPos == 0x20) {
-    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
-      packetBuf[0], packetBuf[1],
-      packetBuf[2], packetBuf[3],
-      packetBuf[4], packetBuf[5],
-      packetBuf[6], packetBuf[7]
-      );
-    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
-      packetBuf[0x8], packetBuf[0x9],
-      packetBuf[0xA], packetBuf[0xB],
-      packetBuf[0xC], packetBuf[0xD],
-      packetBuf[0xE], packetBuf[0xF]
-      );
-    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
-      packetBuf[0x10], packetBuf[0x11],
-      packetBuf[0x12], packetBuf[0x13],
-      packetBuf[0x14], packetBuf[0x15],
-      packetBuf[0x16], packetBuf[0x17]
-      );
-    printf("%02x%02x%02x%02x %02x%02x%02x%02x\n",
-      packetBuf[0x18], packetBuf[0x19],
-      packetBuf[0x1A], packetBuf[0x1B],
-      packetBuf[0x1C], packetBuf[0x1D],
-      packetBuf[0x1E], packetBuf[0x1F]
-      );
-  }*/
 }
-
-// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-//   printf("received byte %02x\n", readByteBuf);
-//   HAL_UART_Receive_IT(huart, &readByteBuf, 1);
-// }
-// void LPUART1_IRQHandler() {
-//   HAL_UART_IRQHandler(&lpuart1Handle);
-// }
 
 #include "stm32l4xx_ll_usart.h"
 void LPUART1_IRQHandler() {
@@ -191,248 +165,16 @@ void LPUART1_IRQHandler() {
 
 
 
-void LCD_LL_LayerInit(unsigned int layer_id, void *buffer) {
-  LTDC_LayerCfgTypeDef cfg;
-  cfg.WindowX0 = 0;
-  cfg.WindowX1 = 240;
-  cfg.WindowY0 = 0;
-  cfg.WindowY1 = 536;
-  cfg.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA;
-  cfg.PixelFormat = LTDC_PIXEL_FORMAT_RGB888;
-  cfg.ImageWidth = 240;
-  cfg.Alpha0 = 0;
-  cfg.Alpha = 0xFF;
-  cfg.Backcolor.Red = 0;
-  cfg.Backcolor.Green = 0;
-  cfg.Backcolor.Blue = 0;
-  cfg.Backcolor.Reserved = 0xFF;
-  cfg.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
-  cfg.FBStartAdress = (uint32_t)buffer;
-  cfg.ImageHeight = 536;
-  if (HAL_LTDC_ConfigLayer(&ltdcHandle, &cfg, layer_id) != HAL_OK) {
-    printf("HAL_LTDC_ConfigLayer failed!\n");
-    while(1);
-  }
-  __HAL_LTDC_LAYER_ENABLE(&ltdcHandle, layer_id);
-}
 
-
-void init_lcd() {
-  GPIO_InitTypeDef gpio;
-  DSI_PLLInitTypeDef      dsiPllInit;
-  DSI_PHY_TimerTypeDef    PhyTimings;
-  DSI_HOST_TimeoutTypeDef HostTimeouts;
-  DSI_LPCmdTypeDef        LPCmd;
-  DSI_CmdCfgTypeDef       CmdCfg;
-
-  printf("Doing pre-LTCD DMA2D reset...\n");
-  __HAL_RCC_DMA2D_CLK_ENABLE();
-  __HAL_RCC_DMA2D_FORCE_RESET();
-  __HAL_RCC_DMA2D_RELEASE_RESET();
-
-  printf("Doing pre-LTCD GPIO stuff...\n");
-  // sub_80ABC9E
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  gpio.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio.Pin = GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8;
-  gpio.Pull = GPIO_NOPULL;
-  gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOB, &gpio);
-
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
-  HAL_Delay(20);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
-  HAL_Delay(20);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
-  HAL_Delay(20);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
-  HAL_Delay(20);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-  HAL_Delay(20);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
-  HAL_Delay(20);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  gpio.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio.Pin = GPIO_PIN_8;
-  gpio.Pull = GPIO_NOPULL;
-  gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOC, &gpio);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
-  HAL_Delay(2);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
-  HAL_Delay(120);
-  // end sub_80ABC9E
-
-  HAL_LTDC_DeInit(&ltdcHandle);
-  ltdcHandle.Instance = LTDC;
-  __HAL_LTDC_RESET_HANDLE_STATE(&ltdcHandle);
-  ltdcHandle.Init.VerticalSync = 4;
-  ltdcHandle.Init.VSPolarity = LTDC_VSPOLARITY_AL;
-  ltdcHandle.Init.DEPolarity = LTDC_DEPOLARITY_AL;
-  ltdcHandle.Init.PCPolarity = LTDC_PCPOLARITY_IPC;
-  ltdcHandle.Init.AccumulatedVBP = 16;
-  ltdcHandle.Init.HorizontalSync = 20;
-  ltdcHandle.Init.AccumulatedActiveH = 552;
-  ltdcHandle.Init.AccumulatedHBP = 60;
-  ltdcHandle.Init.TotalHeigh = 572;
-  ltdcHandle.Init.AccumulatedActiveW = 300;
-  ltdcHandle.Init.HSPolarity = LTDC_HSPOLARITY_AL;
-  ltdcHandle.Init.TotalWidth = 320;
-  ltdcHandle.Init.Backcolor.Red = 0;
-  ltdcHandle.Init.Backcolor.Green = 0;
-  ltdcHandle.Init.Backcolor.Blue = 0;
-  ltdcHandle.Init.Backcolor.Reserved = 0xFF;
-  printf("Initialising LTDC...\n");
-  if(HAL_LTDC_Init(&ltdcHandle) != HAL_OK)
-  {
-    printf("LTDC init failed\n");
-    while(1);
-  }
-
-  printf("Initialising LCD layer...\n");
-  LCD_LL_LayerInit(LTDC_LAYER_1, screen_buffer);
-
-  printf("Initialising DSI...\n");
-  dsiHandle.Instance = DSI;
-  dsiHandle.State = HAL_DSI_STATE_RESET;
-  dsiHandle.Init.AutomaticClockLaneControl = DSI_AUTO_CLK_LANE_CTRL_DISABLE;
-  dsiHandle.Init.TXEscapeCkdiv = 4;
-  dsiHandle.Init.NumberOfLanes = DSI_ONE_DATA_LANE;
-  dsiPllInit.PLLNDIV = 100;
-  dsiPllInit.PLLIDF = 5;
-  dsiPllInit.PLLODF = 0;
-  if (HAL_DSI_Init(&dsiHandle, &dsiPllInit) != HAL_OK) {
-    printf("DSI init failed\n");
-    while(1);
-  }
-
-  printf("config phy...\n");
-  PhyTimings.ClockLaneHS2LPTime  = 33;
-  PhyTimings.ClockLaneLP2HSTime  = 30;
-  PhyTimings.DataLaneHS2LPTime   = 11;
-  PhyTimings.DataLaneLP2HSTime   = 21;
-  PhyTimings.DataLaneMaxReadTime = 0;
-  PhyTimings.StopWaitTime        = 7;
-  if (HAL_DSI_ConfigPhyTimer(&dsiHandle, &PhyTimings) != HAL_OK) {
-    printf("DSI phy timings failed\n");
-    while(1);
-  }
-
-  printf("config host...\n");
-  HostTimeouts.TimeoutCkdiv                 = 1;
-  HostTimeouts.HighSpeedTransmissionTimeout = 0;
-  HostTimeouts.LowPowerReceptionTimeout     = 0;
-  HostTimeouts.HighSpeedReadTimeout         = 0;
-  HostTimeouts.LowPowerReadTimeout          = 0;
-  HostTimeouts.HighSpeedWriteTimeout        = 0;
-  HostTimeouts.HighSpeedWritePrespMode      = 0;
-  HostTimeouts.LowPowerWriteTimeout         = 0;
-  HostTimeouts.BTATimeout                   = 0;
-  if (HAL_DSI_ConfigHostTimeouts(&dsiHandle, &HostTimeouts) != HAL_OK) {
-    printf("DSI host timeouts failed\n");
-    while(1);
-  }
-
-  printf("config lp...\n");
-  LPCmd.LPGenShortWriteNoP  = DSI_LP_GSW0P_ENABLE;
-  LPCmd.LPGenShortWriteOneP = DSI_LP_GSW1P_ENABLE;
-  LPCmd.LPGenShortWriteTwoP = DSI_LP_GSW2P_ENABLE;
-  LPCmd.LPGenShortReadNoP   = DSI_LP_GSR0P_ENABLE;
-  LPCmd.LPGenShortReadOneP  = DSI_LP_GSR1P_ENABLE;
-  LPCmd.LPGenShortReadTwoP  = DSI_LP_GSR2P_ENABLE;
-  LPCmd.LPGenLongWrite      = DSI_LP_GLW_DISABLE;
-  LPCmd.LPDcsShortWriteNoP  = DSI_LP_DSW0P_ENABLE;
-  LPCmd.LPDcsShortWriteOneP = DSI_LP_DSW1P_ENABLE;
-  LPCmd.LPDcsShortReadNoP   = DSI_LP_DSR0P_ENABLE;
-  LPCmd.LPDcsLongWrite      = DSI_LP_DLW_DISABLE;
-  LPCmd.LPMaxReadPacket     = DSI_LP_MRDP_DISABLE;
-  LPCmd.AcknowledgeRequest  = DSI_ACKNOWLEDGE_DISABLE;
-  if (HAL_DSI_ConfigCommand(&dsiHandle, &LPCmd) != HAL_OK) {
-    printf("DSI config command failed\n");
-    while(1);
-  }
-
-  printf("config cmd...\n");
-  CmdCfg.VirtualChannelID      = 0;
-  CmdCfg.ColorCoding           = DSI_RGB888;
-  CmdCfg.CommandSize           = 536;
-  CmdCfg.TearingEffectSource   = DSI_TE_EXTERNAL;
-  CmdCfg.HSPolarity            = DSI_HSYNC_ACTIVE_HIGH;
-  CmdCfg.VSPolarity            = DSI_VSYNC_ACTIVE_HIGH;
-  CmdCfg.AutomaticRefresh      = DSI_AR_DISABLE;
-  CmdCfg.TearingEffectPolarity = DSI_TE_FALLING_EDGE;
-  CmdCfg.DEPolarity            = DSI_DATA_ENABLE_ACTIVE_HIGH;
-  CmdCfg.VSyncPol              = DSI_VSYNC_FALLING;
-  CmdCfg.TEAcknowledgeRequest  = DSI_TE_ACKNOWLEDGE_ENABLE;
-  if (HAL_DSI_ConfigAdaptedCommandMode(&dsiHandle, &CmdCfg) != HAL_OK) {
-    printf("DSI config adapted command mode failed\n");
-    while(1);
-  }
-
-  __HAL_DSI_ENABLE(&dsiHandle);
-
-  printf("send stuff...\n");
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0xFE, 0x04);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x6A, 0x00);
-
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0xFE, 0x05);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x05, 0x00);
-
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0xFE, 0x07);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x07, 0x4F);
-
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0xFE, 0x01);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x27, 0x18);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x28, 0x18);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x2A, 0x02);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x2B, 0x73);
-
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0xFE, 0x0A);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x29, 0x10);
-
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0xFE, 0x00);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, DSI_SET_TEAR_ON, 0x00);
-  HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, DSI_EXIT_SLEEP_MODE, 0x00);
-  HAL_Delay(120);
-  int status = HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, DSI_SET_DISPLAY_ON, 0x00);
-  HAL_Delay(50);
-  printf("screenon status result:%d\n", status);
-  status = HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, 0x51, 80);
-  HAL_Delay(50);
-  printf("brightness status result:%d\n", status);
-
-  printf("almost done...\n");
-  __HAL_DSI_WRAPPER_ENABLE(&dsiHandle);
-
-  DMA2D->CR |= DMA2D_CR_TCIE;
-  HAL_NVIC_SetPriority(DMA2D_IRQn, 0x8, 0x0);
-  HAL_NVIC_EnableIRQ(DMA2D_IRQn);
-  printf("out of lcd init\n");
-}
-
-int toDraw = 0;
-int screenOn = 1;
-
-void HAL_DSI_TearingEffectCallback(DSI_HandleTypeDef *hdsi) {
-  if (toDraw && screenOn) {
-    HAL_DSI_Refresh(hdsi);
-    // printf("T");
+void brightnessSliderCB(lv_obj_t *slider, lv_event_t event) {
+  if (event == LV_EVENT_VALUE_CHANGED) {
+    ocDisplaySetBrightness(lv_slider_get_value(slider));
   }
 }
-void HAL_DSI_EndOfRefreshCallback(DSI_HandleTypeDef *hdsi) {
-  if (toDraw) {
-    toDraw = 0;
-    // printf("E");
-  }
-}
-void HAL_DSI_ErrorCallback(DSI_HandleTypeDef *hdsi) {
-  printf("DSIError\n");
-}
+
+
+bool ioMysteryPin6Flag = false;
+
 
 int main(void)
 {
@@ -500,19 +242,7 @@ int main(void)
   HAL_UART_Receive_IT(&lpuart1Handle, &readByteBuf, 1);
   BSP_LED_Off(LED1);
 
-  // uart4Handle.Instance = UART4;
-  // uart4Handle.Init.WordLength = UART_WORDLENGTH_8B;
-  // uart4Handle.Init.Parity = UART_PARITY_NONE;
-  // uart4Handle.Init.StopBits = UART_STOPBITS_1;
-  // uart4Handle.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  // uart4Handle.Init.OverSampling = UART_OVERSAMPLING_16;
-  // uart4Handle.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  // uart4Handle.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  // uart4Handle.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  // uart4Handle.Init.Mode = UART_MODE_TX_RX;
-  // uart4Handle.Init.BaudRate = 115200;
-  // if (HAL_UART_Init(&uart4Handle) != HAL_OK)
-  //   Error_Handler();
+  // UART4 init would go here but we don't seem to use that
 
   printf("setting gpios\n");
   GPIO_InitTypeDef i;
@@ -536,154 +266,44 @@ int main(void)
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0xF, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
-  printf("We're in\n");
+  ocDisplayInit();
+  ocTouchInit();
 
-  for (int i = 0; i < sizeof(screen_buffer); i += 123) {
-    screen_buffer[i] = 90;
-  }
+  lv_init();
 
-  init_lcd();
+  ocDisplaySetupGUI();
+  ocTouchSetupGUI();
 
-  for (int i = 0; i < sizeof(screen_buffer); i += 23) {
-    screen_buffer[i] = 180;
-  }
+  lv_obj_t *slider = lv_slider_create(lv_scr_act(), NULL);
+  lv_slider_set_range(slider, 10, 160); // TODO: check me?
+  lv_slider_set_value(slider, 40, LV_ANIM_OFF);
+  lv_obj_set_pos(slider, 10, 10);
+  lv_obj_set_width(slider, SCREEN_WIDTH - 20);
+  lv_obj_set_event_cb(slider, brightnessSliderCB);
 
-  for (int i = 0; i < sizeof(img); i++)
-    screen_buffer[i] = img[i];
+  lv_obj_t *consolePage = lv_page_create(lv_scr_act(), NULL);
+  lv_obj_set_pos(consolePage, 0, 60);
+  lv_obj_set_size(consolePage, SCREEN_WIDTH, SCREEN_HEIGHT - 60);
 
-  for (int i = 0; i < 240; i++) {
-    screen_buffer[i * 3] = 0xFF;
-  }
+  consoleObj = lv_label_create(consolePage, NULL);
+  lv_label_set_long_mode(consoleObj, LV_LABEL_LONG_BREAK);
+  lv_obj_set_width(consoleObj, lv_page_get_fit_width(consolePage));
+  console[0] = 0;
+  lv_label_set_static_text(consoleObj, console);
 
-  while (BSP_DSI_TS_Init(240, 536) != TS_OK)
-    HAL_Delay(20);
-  BSP_DSI_TS_ITConfig();
-  printf("Touchscreen configured\n");
-
-int ct = 0;
+  lv_disp_t *disp = lv_disp_get_default();
   while (1)
   {
-    ++ct;
-    HAL_Delay(500);
-    // printf("running...\n");
-    toDraw = 1;
-    // uint8_t buf[4] = {'a','b','c','d'};
-    // HAL_UART_Transmit(&lpuart1Handle, buf, 4, 5000);
-    for (int i = 100*240; i < 120*240; i++) {
-      screen_buffer[i*3] += 8;
+    HAL_Delay(5);
+    lv_task_handler();
+
+    if (ioMysteryPin6Flag) {
+      consolePush("Pin6 detected\n");
+      ioMysteryPin6Flag = false;
     }
 
-    if (ct == 50) {
-      // tomorrow I'll replace this with something more reasonable
-      // this is just so I don't burn my test screen into the OLED panel :p
-      HAL_DSI_ShortWrite(&dsiHandle, 0, DSI_DCS_SHORT_PKT_WRITE_P1, DSI_SET_DISPLAY_OFF, 0x00);
-      screenOn = 0;
-    }
+    ocDisplaySetPowerState((disp->last_activity_time + 5000) >= lv_tick_get());
   }
-}
-
-void checkTouch() {
-  HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
-  printf("touch!!\n");
-  TS_StateTypeDef state;
-  BSP_DSI_TS_GetState(&state);
-  printf("det:%d t:%d,%d t:%d,%d\n",
-    state.touchDetected,
-    state.touchX[0], state.touchY[0],
-    state.touchX[1], state.touchY[1]
-    );
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-}
-
-
-
-void SystemClock_Config(void)
-{
-  RCC_ClkInitTypeDef RCC_ClkInitStruct;
-  RCC_OscInitTypeDef RCC_OscInitStruct;
-  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
-  static RCC_CRSInitTypeDef RCC_CRSInitStruct;
-  
-  /* Enable voltage range 1 boost mode for frequency above 80 Mhz */
-  __HAL_RCC_PWR_CLK_ENABLE();
-  HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
-  __HAL_RCC_PWR_CLK_DISABLE();
-  
-  /* Enable the LSE Oscilator */
-  RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI48;
-  RCC_OscInitStruct.HSI48State          = RCC_HSI48_ON;
-  RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_OFF;
-  HAL_RCC_OscConfig(&RCC_OscInitStruct);
-  
-  /* Enable MSI Oscillator and activate PLL with MSI as source   */
-  /* (Default MSI Oscillator enabled at system reset remains ON) */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
-  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
-  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
-  RCC_OscInitStruct.MSICalibrationValue = RCC_MSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
-  RCC_OscInitStruct.PLL.PLLM = 1;
-  RCC_OscInitStruct.PLL.PLLN = 60;
-  RCC_OscInitStruct.PLL.PLLR = 2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
-  RCC_OscInitStruct.PLL.PLLP = 7;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    /* Initialization Error */
-    while(1);
-  }
-
-  /* Enable MSI Auto-calibration through LSE */
-  HAL_RCCEx_EnableMSIPLLMode();
-
-  /* Select HSI84 output as USB clock source */
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USB;
-  PeriphClkInitStruct.UsbClockSelection = RCC_USBCLKSOURCE_HSI48;
-  HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct);
-
-  /* To avoid undershoot due to maximum frequency, select PLL as system clock source */
-  /* with AHB prescaler divider 2 as first step */
-  RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV2;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;  
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;  
-  if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
-  {
-    /* Initialization Error */
-    while(1);
-  }
-
-  /* AHB prescaler divider at 1 as second step */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
-  {
-    /* Initialization Error */
-    while(1);
-  }
-  
-    /*Configure the clock recovery system (CRS)**********************************/
-  
-  /* Enable CRS Clock */
-  __HAL_RCC_CRS_CLK_ENABLE();
-    
-  /* Default Synchro Signal division factor (not divided) */
-  RCC_CRSInitStruct.Prescaler = RCC_CRS_SYNC_DIV1;
-  
-  /* Set the SYNCSRC[1:0] bits according to CRS_Source value */
-  RCC_CRSInitStruct.Source = RCC_CRS_SYNC_SOURCE_USB;
-  
-  /* HSI48 is synchronized with USB SOF at 1KHz rate */
-  RCC_CRSInitStruct.ReloadValue =  __HAL_RCC_CRS_RELOADVALUE_CALCULATE(48000000, 1000);
-  RCC_CRSInitStruct.ErrorLimitValue = RCC_CRS_ERRORLIMIT_DEFAULT;
-  
-  /* Set the TRIM[5:0] to the default value*/
-  RCC_CRSInitStruct.HSI48CalibrationValue = 0x20; 
-  
-  /* Start automatic synchronization */ 
-  HAL_RCCEx_CRSConfig (&RCC_CRSInitStruct);
 }
 
 

@@ -39,7 +39,7 @@
   */
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32l4xx_hal.h"
+#include "opencodi.h"
 
 /** @addtogroup STM32L4xx_HAL_Driver
   * @{
@@ -161,6 +161,7 @@ void HAL_ResumeTick(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   HAL_IncTick();
+  lv_tick_inc(1);
 }
 
 /**

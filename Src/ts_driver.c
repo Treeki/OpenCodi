@@ -18,6 +18,7 @@
   ******************************************************************************
   */
 
+#include "opencodi.h"
 #include "ft3x67/ft3x67.h"
 #define TS_MAX_NB_TOUCH                 ((uint32_t) FT3X67_MAX_DETECTABLE_TOUCH)
 
@@ -330,3 +331,38 @@ uint8_t BSP_DSI_TS_ITGetStatus(void)
   */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+static bool touched = false;
+static int touchX = 0, touchY = 0;
+
+void ocTouchInit() {
+	while (BSP_DSI_TS_Init(240, 536) != TS_OK)
+		HAL_Delay(20);
+	BSP_DSI_TS_ITConfig();
+}
+
+static bool guiReadTouchCB(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
+	data->state = touched ? LV_INDEV_STATE_PR : LV_INDEV_STATE_REL;
+	data->point.x = touchX;
+	data->point.y = touchY;
+	return false;
+}
+
+void ocTouchSetupGUI() {
+	lv_indev_drv_t indev_drv;
+	lv_indev_drv_init(&indev_drv);
+	indev_drv.type = LV_INDEV_TYPE_POINTER;
+	indev_drv.read_cb = guiReadTouchCB;
+	lv_indev_t *indev = lv_indev_drv_register(&indev_drv);
+}
+
+void ocTouchUpdateFromIRQ() {
+	HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+	TS_StateTypeDef state;
+	BSP_DSI_TS_GetState(&state);
+	touched = (state.touchDetected >= 1);
+	touchX = state.touchX[0];
+	touchY = state.touchY[0];
+	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+}
+

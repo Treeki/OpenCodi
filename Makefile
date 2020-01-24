@@ -42,7 +42,10 @@ Src/main.c \
 Src/stm32l4xx_it.c \
 Src/stm32l4xx_hal_msp.c \
 Src/stm32l4xx_hal_timebase_tim.c \
+Src/display_driver.c \
 Src/ts_driver.c \
+Src/syscalls.c \
+Src/system_stm32l4xx.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_gfxmmu.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_i2c.c \
@@ -72,8 +75,81 @@ $(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL/stm32l4r9i_eval.c \
 $(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL/stm32l4r9i_eval_sram.c \
 $(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL/stm32l4r9i_eval_ospi_nor.c \
 $(DRIVERS_DIR)/BSP/Components/ft3x67/ft3x67.c \
-Src/syscalls.c \
-Src/system_stm32l4xx.c  
+lvgl/src/lv_core/lv_debug.c \
+lvgl/src/lv_core/lv_disp.c \
+lvgl/src/lv_core/lv_group.c \
+lvgl/src/lv_core/lv_indev.c \
+lvgl/src/lv_core/lv_obj.c \
+lvgl/src/lv_core/lv_refr.c \
+lvgl/src/lv_core/lv_style.c \
+lvgl/src/lv_draw/lv_draw.c \
+lvgl/src/lv_draw/lv_draw_arc.c \
+lvgl/src/lv_draw/lv_draw_basic.c \
+lvgl/src/lv_draw/lv_draw_img.c \
+lvgl/src/lv_draw/lv_draw_label.c \
+lvgl/src/lv_draw/lv_draw_line.c \
+lvgl/src/lv_draw/lv_draw_rect.c \
+lvgl/src/lv_draw/lv_draw_triangle.c \
+lvgl/src/lv_draw/lv_img_cache.c \
+lvgl/src/lv_draw/lv_img_decoder.c \
+lvgl/src/lv_font/lv_font.c \
+lvgl/src/lv_font/lv_font_fmt_txt.c \
+lvgl/src/lv_font/lv_font_roboto_16.c \
+lvgl/src/lv_hal/lv_hal_disp.c \
+lvgl/src/lv_hal/lv_hal_indev.c \
+lvgl/src/lv_hal/lv_hal_tick.c \
+lvgl/src/lv_misc/lv_anim.c \
+lvgl/src/lv_misc/lv_area.c \
+lvgl/src/lv_misc/lv_async.c \
+lvgl/src/lv_misc/lv_bidi.c \
+lvgl/src/lv_misc/lv_circ.c \
+lvgl/src/lv_misc/lv_color.c \
+lvgl/src/lv_misc/lv_fs.c \
+lvgl/src/lv_misc/lv_gc.c \
+lvgl/src/lv_misc/lv_ll.c \
+lvgl/src/lv_misc/lv_log.c \
+lvgl/src/lv_misc/lv_math.c \
+lvgl/src/lv_misc/lv_mem.c \
+lvgl/src/lv_misc/lv_printf.c \
+lvgl/src/lv_misc/lv_task.c \
+lvgl/src/lv_misc/lv_templ.c \
+lvgl/src/lv_misc/lv_txt.c \
+lvgl/src/lv_misc/lv_utils.c \
+lvgl/src/lv_objx/lv_arc.c \
+lvgl/src/lv_objx/lv_bar.c \
+lvgl/src/lv_objx/lv_btn.c \
+lvgl/src/lv_objx/lv_btnm.c \
+lvgl/src/lv_objx/lv_calendar.c \
+lvgl/src/lv_objx/lv_canvas.c \
+lvgl/src/lv_objx/lv_cb.c \
+lvgl/src/lv_objx/lv_chart.c \
+lvgl/src/lv_objx/lv_cont.c \
+lvgl/src/lv_objx/lv_cpicker.c \
+lvgl/src/lv_objx/lv_ddlist.c \
+lvgl/src/lv_objx/lv_gauge.c \
+lvgl/src/lv_objx/lv_img.c \
+lvgl/src/lv_objx/lv_imgbtn.c \
+lvgl/src/lv_objx/lv_kb.c \
+lvgl/src/lv_objx/lv_label.c \
+lvgl/src/lv_objx/lv_led.c \
+lvgl/src/lv_objx/lv_line.c \
+lvgl/src/lv_objx/lv_list.c \
+lvgl/src/lv_objx/lv_lmeter.c \
+lvgl/src/lv_objx/lv_mbox.c \
+lvgl/src/lv_objx/lv_objx_templ.c \
+lvgl/src/lv_objx/lv_page.c \
+lvgl/src/lv_objx/lv_preload.c \
+lvgl/src/lv_objx/lv_roller.c \
+lvgl/src/lv_objx/lv_slider.c \
+lvgl/src/lv_objx/lv_spinbox.c \
+lvgl/src/lv_objx/lv_sw.c \
+lvgl/src/lv_objx/lv_ta.c \
+lvgl/src/lv_objx/lv_table.c \
+lvgl/src/lv_objx/lv_tabview.c \
+lvgl/src/lv_objx/lv_tileview.c \
+lvgl/src/lv_objx/lv_win.c \
+lvgl/src/lv_themes/lv_theme.c \
+lvgl/src/lv_themes/lv_theme_default.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -131,12 +207,12 @@ AS_INCLUDES =
 # C includes
 C_INCLUDES =  \
 -IInc \
+-Ilvgl \
 -I$(DRIVERS_DIR)/BSP/Components \
 -I$(DRIVERS_DIR)/BSP/STM32L4R9I_EVAL \
 -I$(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Inc \
 -I$(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Inc/Legacy \
 -I$(DRIVERS_DIR)/CMSIS/Device/ST/STM32L4xx/Include \
--I$(DRIVERS_DIR)/CMSIS/Include \
 -I$(DRIVERS_DIR)/CMSIS/Include
 
 

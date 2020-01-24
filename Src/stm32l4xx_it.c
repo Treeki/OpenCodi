@@ -16,25 +16,29 @@
   ******************************************************************************
   */
 
-#include "main.h"
+#include "opencodi.h"
 #include "stm32l4xx_it.h"
 
 void NMI_Handler() {
 }
 
 void HardFault_Handler() {
+  printf("HardFault\n");
   while (1);
 }
 
 void MemManage_Handler() {
+  printf("MemManage\n");
   while (1);
 }
 
 void BusFault_Handler() {
+  printf("BusFault\n");
   while (1);
 }
 
 void UsageFault_Handler() {
+  printf("UsageFault\n");
   while (1);
 }
 
@@ -48,7 +52,7 @@ void PendSV_Handler() {
 }
 
 void SysTick_Handler() {
-  HAL_IncTick();
+  // not used - see the timer handler in stm32l4xx_hal_timebase_tim.c
 }
 
 void DSI_IRQHandler() {
@@ -69,15 +73,24 @@ void DMA2D_IRQHandler() {
 void EXTI9_5_IRQHandler() {
   if (__HAL_GPIO_EXTI_GET_FLAG(GPIO_PIN_9) != RESET)
     HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_9);
+  if (__HAL_GPIO_EXTI_GET_FLAG(GPIO_PIN_6) != RESET)
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);
+}
+void EXTI15_10_IRQHandler() {
+  printf("Got a 1015!\n");
 }
 
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   switch (GPIO_Pin) {
+    case GPIO_PIN_6:
+      ioMysteryPin6Flag = true;
+      break;
     case GPIO_PIN_9:
-      checkTouch();
+      ocTouchUpdateFromIRQ();
       break;
   }
 }
+
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

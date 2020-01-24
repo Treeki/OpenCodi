@@ -322,6 +322,96 @@ void SystemCoreClockUpdate(void)
 }
 
 
+void SystemClock_Config(void)
+{
+  RCC_ClkInitTypeDef RCC_ClkInitStruct;
+  RCC_OscInitTypeDef RCC_OscInitStruct;
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+  static RCC_CRSInitTypeDef RCC_CRSInitStruct;
+  
+  /* Enable voltage range 1 boost mode for frequency above 80 Mhz */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
+  __HAL_RCC_PWR_CLK_DISABLE();
+  
+  /* Enable the LSE Oscilator */
+  RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI48;
+  RCC_OscInitStruct.HSI48State          = RCC_HSI48_ON;
+  RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_OFF;
+  HAL_RCC_OscConfig(&RCC_OscInitStruct);
+  
+  /* Enable MSI Oscillator and activate PLL with MSI as source   */
+  /* (Default MSI Oscillator enabled at system reset remains ON) */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+  RCC_OscInitStruct.MSICalibrationValue = RCC_MSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
+  RCC_OscInitStruct.PLL.PLLM = 1;
+  RCC_OscInitStruct.PLL.PLLN = 60;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLP = 7;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    /* Initialization Error */
+    while(1);
+  }
+
+  /* Enable MSI Auto-calibration through LSE */
+  HAL_RCCEx_EnableMSIPLLMode();
+
+  /* Select HSI84 output as USB clock source */
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USB;
+  PeriphClkInitStruct.UsbClockSelection = RCC_USBCLKSOURCE_HSI48;
+  HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct);
+
+  /* To avoid undershoot due to maximum frequency, select PLL as system clock source */
+  /* with AHB prescaler divider 2 as first step */
+  RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;  
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;  
+  if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
+  {
+    /* Initialization Error */
+    while(1);
+  }
+
+  /* AHB prescaler divider at 1 as second step */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  {
+    /* Initialization Error */
+    while(1);
+  }
+  
+    /*Configure the clock recovery system (CRS)**********************************/
+  
+  /* Enable CRS Clock */
+  __HAL_RCC_CRS_CLK_ENABLE();
+    
+  /* Default Synchro Signal division factor (not divided) */
+  RCC_CRSInitStruct.Prescaler = RCC_CRS_SYNC_DIV1;
+  
+  /* Set the SYNCSRC[1:0] bits according to CRS_Source value */
+  RCC_CRSInitStruct.Source = RCC_CRS_SYNC_SOURCE_USB;
+  
+  /* HSI48 is synchronized with USB SOF at 1KHz rate */
+  RCC_CRSInitStruct.ReloadValue =  __HAL_RCC_CRS_RELOADVALUE_CALCULATE(48000000, 1000);
+  RCC_CRSInitStruct.ErrorLimitValue = RCC_CRS_ERRORLIMIT_DEFAULT;
+  
+  /* Set the TRIM[5:0] to the default value*/
+  RCC_CRSInitStruct.HSI48CalibrationValue = 0x20; 
+  
+  /* Start automatic synchronization */ 
+  HAL_RCCEx_CRSConfig (&RCC_CRSInitStruct);
+}
+
+
 /**
   * @}
   */

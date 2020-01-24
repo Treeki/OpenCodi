@@ -17,8 +17,7 @@
   ******************************************************************************
   */
 
-#include "main.h"
-#include "stdio.h"
+#include "opencodi.h"
 
 void HAL_UART_MspInit(UART_HandleTypeDef* huart)
 {
