@@ -20,10 +20,30 @@ void ocTouchInit();
 void ocTouchSetupGUI();
 void ocTouchUpdateFromIRQ();
 
+// uart_comms.c
+extern UART_HandleTypeDef lpuart1Handle;
+
+void ocCommsInit();
+void ocCommsStartReceiving();
+void ocCommsCheckQueue();
+uint8_t ocCommsPeek8(int offset);
+uint32_t ocCommsPeek32(int offset);
+
+void ocCommsInitPacket(uint32_t id, uint32_t sequence);
+void ocCommsPut8(uint8_t v);
+void ocCommsPut32(uint32_t v);
+void ocCommsPutString(const char *str);
+void ocCommsSendPacket();
+
+// packets.c
+void ocPacketParseAndDispatch(uint32_t id, uint32_t sequence, int size);
+
 // main.c
-extern UART_HandleTypeDef lpuart1Handle, uart4Handle;
 extern bool ioMysteryPin6Flag;
 void Error_Handler(void);
+
+#define consolePrint(...) do { char strbuf[0x100]; sprintf(strbuf, __VA_ARGS__); consolePush(strbuf); } while (0)
+void consolePush(const char *str);
 
 // system_stm32l4xx.c
 void SystemClock_Config(void);

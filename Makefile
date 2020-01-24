@@ -44,6 +44,8 @@ Src/stm32l4xx_hal_msp.c \
 Src/stm32l4xx_hal_timebase_tim.c \
 Src/display_driver.c \
 Src/ts_driver.c \
+Src/uart_comms.c \
+Src/packets.c \
 Src/syscalls.c \
 Src/system_stm32l4xx.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_gfxmmu.c \
