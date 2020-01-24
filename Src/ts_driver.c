@@ -353,7 +353,7 @@ void ocTouchSetupGUI() {
 	lv_indev_drv_init(&indev_drv);
 	indev_drv.type = LV_INDEV_TYPE_POINTER;
 	indev_drv.read_cb = guiReadTouchCB;
-	lv_indev_t *indev = lv_indev_drv_register(&indev_drv);
+	lv_indev_drv_register(&indev_drv);
 }
 
 void ocTouchUpdateFromIRQ() {

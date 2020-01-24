@@ -1,23 +1,26 @@
 #include "opencodi.h"
 
-// pixels are stored B,G,R
 __attribute__((section(".bss.FrameBufferSection")))
-static unsigned char frameBuffer[SCREEN_HEIGHT * SCREEN_WIDTH * 3];
+static lv_color_t frameBuffer1[SCREEN_HEIGHT * SCREEN_WIDTH];
+__attribute__((section(".bss.FrameBufferSection")))
+static lv_color_t frameBuffer2[SCREEN_HEIGHT * SCREEN_WIDTH];
 
 static bool screenOn;
-static bool needsRedraw;
+static int needsRedraw;
 LTDC_HandleTypeDef ltdcHandle;
 DSI_HandleTypeDef dsiHandle;
 
 
 void HAL_DSI_TearingEffectCallback(DSI_HandleTypeDef *hdsi) {
-  if (needsRedraw && screenOn) {
+  if (needsRedraw > 0 && screenOn) {
+    LTDC_Layer1->CFBAR = (uint32_t)((needsRedraw == 1) ? frameBuffer1 : frameBuffer2);
+	LTDC->SRCR = LTDC_SRCR_IMR;
     HAL_DSI_Refresh(hdsi);
   }
 }
 void HAL_DSI_EndOfRefreshCallback(DSI_HandleTypeDef *hdsi) {
-  if (needsRedraw) {
-    needsRedraw = false;
+  if (needsRedraw > 0) {
+    needsRedraw = 0;
   }
 }
 void HAL_DSI_ErrorCallback(DSI_HandleTypeDef *hdsi) {
@@ -32,7 +35,7 @@ static void initLayer(unsigned int layer_id, void *buffer) {
   cfg.WindowY0 = 0;
   cfg.WindowY1 = 536;
   cfg.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA;
-  cfg.PixelFormat = LTDC_PIXEL_FORMAT_RGB888;
+  cfg.PixelFormat = LTDC_PIXEL_FORMAT_RGB565;
   cfg.ImageWidth = 240;
   cfg.Alpha0 = 0;
   cfg.Alpha = 0xFF;
@@ -53,7 +56,7 @@ static void initLayer(unsigned int layer_id, void *buffer) {
 
 void ocDisplayInit() {
 	screenOn = false;
-	needsRedraw = false;
+	needsRedraw = 0;
 
 	GPIO_InitTypeDef gpio;
 	DSI_PLLInitTypeDef dsiPllInit;
@@ -131,7 +134,7 @@ void ocDisplayInit() {
 	}
 
 	printf("Initialising LCD layer...\n");
-	initLayer(LTDC_LAYER_1, frameBuffer);
+	initLayer(LTDC_LAYER_1, frameBuffer1);
 
 	printf("Initialising DSI...\n");
 	dsiHandle.Instance = DSI;
@@ -263,28 +266,17 @@ void ocDisplaySetBrightness(int value) {
 }
 
 static lv_disp_buf_t lvDispBuf;
-static lv_color_t lvDispBufData[SCREEN_WIDTH * 10];
 
 static void guiDispFlushCB(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
-	int32_t x, y;
-	uint8_t *out = &frameBuffer[(area->y1 * SCREEN_WIDTH + area->x1) * 3];
-	int skip = (SCREEN_WIDTH - (area->x2 - area->x1 + 1)) * 3;
-	for (y = area->y1; y <= area->y2; y++) {
-		for (x = area->x1; x <= area->x2; x++) {
-			*(out++) = LV_COLOR_GET_B(*color_p);
-			*(out++) = LV_COLOR_GET_G(*color_p);
-			*(out++) = LV_COLOR_GET_R(*color_p);
-			color_p++;
-		}
-		out += skip;
-	}
-
-	needsRedraw = true;
+	if (color_p == frameBuffer1)
+		needsRedraw = 1;
+	else
+		needsRedraw = 2;
 	lv_disp_flush_ready(disp);
 }
 
 void ocDisplaySetupGUI() {
-	lv_disp_buf_init(&lvDispBuf, &lvDispBufData, NULL, SCREEN_WIDTH * 10);
+	lv_disp_buf_init(&lvDispBuf, frameBuffer1, frameBuffer2, SCREEN_WIDTH * SCREEN_HEIGHT);
 	printf("lv_disp_buf_init done\n");
 
 	lv_disp_drv_t drv;
