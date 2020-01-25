@@ -37,6 +37,10 @@ uint8_t ocCommsPeek8(int offset) {
 		pos -= mainCB.length;
 	return mainCB.buffer[pos];
 }
+uint16_t ocCommsPeek16(int offset) {
+	return ((uint32_t)ocCommsPeek8(offset + 0) << 8) |
+	       ((uint32_t)ocCommsPeek8(offset + 1));
+}
 uint32_t ocCommsPeek32(int offset) {
 	return ((uint32_t)ocCommsPeek8(offset + 0) << 24) |
 	       ((uint32_t)ocCommsPeek8(offset + 1) << 16) |
@@ -79,7 +83,6 @@ void ocCommsCheckQueue() {
 			cbEatBytes(1);
 
 		int available = cbGetAvailable();
-		if (available > 0)
 		if (available >= 0x10) {
 			if (ocCommsPeek32(0) == 0x58215821 /* 'X!X!' */) {
 				uint32_t packetSize = ocCommsPeek32(4);
@@ -137,6 +140,10 @@ void ocCommsInitPacket(uint32_t id, uint32_t sequence) {
 
 void ocCommsPut8(uint8_t v) {
 	outBuffer[outBufferPosition++] = v;
+}
+void ocCommsPut16(uint16_t v) {
+	ocCommsPut8((v >> 8) & 0xFF);
+	ocCommsPut8(v & 0xFF);
 }
 void ocCommsPut32(uint32_t v) {
 	ocCommsPut8(v >> 24);

@@ -47,6 +47,7 @@ Src/ts_driver.c \
 Src/uart_comms.c \
 Src/packets.c \
 Src/syscalls.c \
+Src/ui.c \
 Src/system_stm32l4xx.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_gfxmmu.c \
 $(DRIVERS_DIR)/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal.c \

@@ -240,7 +240,7 @@ void ocDisplayInit() {
 	HAL_Delay(120);
 	ocDisplaySetPowerState(true);
 	HAL_Delay(50);
-	ocDisplaySetBrightness(0);
+	ocDisplaySetBrightness(40);
 	HAL_Delay(50);
 
 	printf("almost done...\n");

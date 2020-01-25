@@ -28,32 +28,45 @@ int __io_putchar(int ch) {
 }
 
 
-char console[2048];
-lv_obj_t *consoleObj = NULL;
-void consolePush(const char *str) {
-  if (consoleObj == NULL) return;
-  int toAdd = strlen(str);
-  int currentLen = strlen(console);
-  int maxLen = sizeof(console) - 1;
-  if ((toAdd + currentLen) >= maxLen) {
-    int toRemove = maxLen - toAdd;
-    memmove(console, &console[toRemove], currentLen - toRemove);
-    currentLen -= toRemove;
-  }
-  strcpy(&console[currentLen], str);
-  lv_label_set_static_text(consoleObj, console);
-}
-
-
-
-void brightnessSliderCB(lv_obj_t *slider, lv_event_t event) {
-  if (event == LV_EVENT_VALUE_CHANGED) {
-    ocDisplaySetBrightness(lv_slider_get_value(slider));
-  }
-}
-
-
 bool ioMysteryPin6Flag = false;
+
+
+static uint64_t timeLastSetValue = 0;
+static uint32_t timeLastSetTicks = 0;
+
+uint64_t ocTime() {
+  return timeLastSetValue + ((HAL_GetTick() - timeLastSetTicks) / 1000);
+}
+void ocSetTime(int day, int month, int year, int hour, int minute, int second) {
+  if (month <= 2) {
+    month += 12;
+    year--;
+  }
+  int dayTotal = day
+    + (30 * month)
+    + (3 * (month + 1) / 5)
+    + (365 * year)
+    + (year / 400)
+    + (year / 4)
+    - (year / 100)
+    - 719561;
+  timeLastSetValue = second + 60 * minute + 3600 * hour + 86400L * (uint64_t)dayTotal;
+  timeLastSetTicks = HAL_GetTick();
+}
+
+static void perSecondTask(lv_task_t *task) {
+  ocUiUpdatePerSecond();
+}
+
+static void initTask(lv_task_t *task) {
+  // boot packet doesn't have a sensible ID for some reason
+  ocCommsInitPacket(0, 0);
+  ocCommsSendPacket();
+  ocCommsInitPacket(CMD_ST32_GET_DATETIME, 1);
+  ocCommsSendPacket();
+  ocCommsInitPacket(CMD_ST32_GET_BATTERY_LEVEL, 2);
+  ocCommsSendPacket();
+}
 
 
 int main(void)
@@ -140,22 +153,10 @@ int main(void)
   ocDisplaySetupGUI();
   ocTouchSetupGUI();
 
-  lv_obj_t *slider = lv_slider_create(lv_scr_act(), NULL);
-  lv_slider_set_range(slider, 10, 160); // TODO: check me?
-  lv_slider_set_value(slider, 40, LV_ANIM_OFF);
-  lv_obj_set_pos(slider, 10, 10);
-  lv_obj_set_width(slider, SCREEN_WIDTH - 20);
-  lv_obj_set_event_cb(slider, brightnessSliderCB);
+  ocUiSetup();
 
-  lv_obj_t *consolePage = lv_page_create(lv_scr_act(), NULL);
-  lv_obj_set_pos(consolePage, 0, 60);
-  lv_obj_set_size(consolePage, SCREEN_WIDTH, SCREEN_HEIGHT - 60);
-
-  consoleObj = lv_label_create(consolePage, NULL);
-  lv_label_set_long_mode(consoleObj, LV_LABEL_LONG_BREAK);
-  lv_obj_set_width(consoleObj, lv_page_get_fit_width(consolePage));
-  console[0] = 0;
-  lv_label_set_static_text(consoleObj, console);
+  lv_task_create(perSecondTask, 1000, LV_TASK_PRIO_MID, NULL);
+  lv_task_once(lv_task_create(initTask, 1000, LV_TASK_PRIO_LOW, NULL));
 
   lv_disp_t *disp = lv_disp_get_default();
   while (1)
